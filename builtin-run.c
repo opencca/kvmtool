@@ -272,6 +272,8 @@ static int loglevel_parser(const struct option *opt, const char *arg, int unset)
 			"Enable debug messages (deprecated, use "	\
 			"--loglevel=debug instead)",			\
 			loglevel_parser, NULL),				\
+	OPT_BOOLEAN('\0', "benchmark", &(cfg)->benchmark,	\
+			"Enable benchmark"),			\
 	OPT_BOOLEAN('\0', "debug-single-step", &(cfg)->single_step,	\
 			"Enable single stepping"),			\
 	OPT_BOOLEAN('\0', "debug-ioport", &(cfg)->ioport_debug,		\
@@ -280,7 +282,6 @@ static int loglevel_parser(const struct option *opt, const char *arg, int unset)
 			"Enable MMIO debugging"),			\
 	OPT_INTEGER('\0', "debug-iodelay", &(cfg)->debug_iodelay,	\
 			"Delay IO by millisecond"),			\
-									\
 	OPT_ARCH(RUN, cfg)						\
 	OPT_END()							\
 	};
@@ -865,17 +866,111 @@ static void kvm_cmd_run_exit(struct kvm *kvm, int guest_ret)
 		pr_info("KVM session ended normally.");
 }
 
+static inline void opencca_init_benchmark(int is_board);
+static inline void opencca_start_benchmark(void);
+
 int kvm_cmd_run(int argc, const char **argv, const char *prefix)
 {
 	int ret = -EFAULT;
 	struct kvm *kvm;
 
+	
+
 	kvm = kvm_cmd_run_init(argc, argv);
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
+
+	if (kvm->cfg.benchmark)
+	{ // Opencca VM boot benchmarks
+		printf("================ VM Boot benchmark\n");
+		opencca_init_benchmark(/* is board = 1*/ 1);
+		opencca_start_benchmark();
+	}
 
 	ret = kvm_cmd_run_work(kvm);
 	kvm_cmd_run_exit(kvm, ret);
 
 	return ret;
+}
+
+
+/* standard C library headers required */
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+// #include "fvp_benchmark.h"
+
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/poll.h>
+
+// #define DEBUG
+
+#ifdef DEBUG
+#define DO_DEBUG 1
+#else
+#define DO_DEBUG 0
+#endif
+
+/* the following is optional depending on the timing function used */
+#include <time.h>
+
+#define KERNEL_DEV "/sys/kernel/debug/opencca/userbench"
+
+int opencca_fd;
+int opencca_enabled = 0;
+int opencca_is_board = 0;
+
+static inline void opencca_init_benchmark(int is_board) {    
+	#if DO_DEBUG
+	printf("opencca_init_benchmark\n");
+	#endif
+	if (opencca_enabled) {
+		printf("init called but already enabled\n");
+		exit(1);
+		return;
+	}
+	// CCA_BENCHMARK_INIT;
+
+	opencca_enabled = 1;
+	opencca_is_board = (is_board == 1);
+    opencca_fd = open(KERNEL_DEV, O_RDWR);
+    if (opencca_fd < 0) {
+        printf("%s\n", KERNEL_DEV);
+        perror("Cannot open fd\n");
+		exit(1);
+        // return -1;
+    }
+}
+
+static inline void opencca_start_benchmark(void) {
+	if (!opencca_enabled) {
+		printf("error not enabed\n");
+		// exit(1);
+		return;
+	}
+	#if DO_DEBUG
+	printf("opencca_start_benchmark\n");
+	#endif
+	// CCA_BENCHMARK_START;
+	int arg = opencca_is_board;
+    write(opencca_fd, &arg, sizeof(arg)); 
+}
+
+static inline  void opencca_stop_benchmark(void) {
+	if (!opencca_enabled) {
+		printf("error not enabed\n");
+		exit(1);
+		return;
+	}
+	#if DO_DEBUG
+	printf("opencca_stop_benchmark\n");
+	#endif
+
+
+	int arg = opencca_is_board;
+    write(opencca_fd, &arg, sizeof(arg)); 
+	// CCA_BENCHMARK_STOP;
 }

@@ -32,6 +32,7 @@ struct kvm_config {
 	bool nodefaults;
 	int active_console;
 	int debug_iodelay;
+	bool benchmark;
 	int nrcpus;
 	const char *kernel_cmdline;
 	const char *kernel_filename;
